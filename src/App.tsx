@@ -134,7 +134,7 @@ export default function PuyoPuyo() {
         const allToRemove: Position[] = groups.flat();
         totalCleared += allToRemove.length;
 
-        playSound('/wao.mp3');
+        playSound('wao.mp3');
 
         // 消えるアニメーション
         setClearingPositions(allToRemove);
@@ -410,7 +410,7 @@ export default function PuyoPuyo() {
         </div>
       </div>
 
-      <div className="text-white text-center mb-4 bg-blue-800 bg-opacity-50 p-4 rounded-lg">
+      <div className="hidden md:block text-white text-center mb-4 bg-blue-800 bg-opacity-50 p-4 rounded-lg">
         <div className="mb-2 font-bold">矢印キー: 移動</div>
         <div className="mb-2 font-bold">↑ / Z: 回転</div>
         <div className="mb-2 font-bold">スペース: 高速落下</div>
