@@ -297,7 +297,7 @@ export default function PuyoPuyo() {
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-b from-blue-400 to-blue-600 p-4 w-screen h-screen">
-      <h1 className="text-5xl font-bold text-white mb-4 drop-shadow-lg">ぷよぷよ</h1>
+      <h1 className="text-5xl font-bold text-white mb-4 drop-shadow-lg">ﾜｵぷよ</h1>
 
       <div className="mb-4 text-center relative">
         <div className="text-3xl font-bold text-white mb-2 drop-shadow">スコア: {score}</div>
