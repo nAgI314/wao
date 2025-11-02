@@ -30,6 +30,7 @@ export default function PuyoPuyo() {
   const [chainCount, setChainCount] = useState<number>(0);
   const [showChainText, setShowChainText] = useState<boolean>(false);
   const [clearedCount, setClearedCount] = useState<number>(0);
+  const [volume, setVolume] = useState<number>(0.6);
 
   const createNewPair = useCallback((): Puyo[] => {
     const color1 = Math.floor(Math.random() * COLORS.length) + 1;
@@ -129,7 +130,7 @@ export default function PuyoPuyo() {
 
       if (groups.length > 0) {
         chain++;
-        
+
         // すべての消えるぷよを一度に収集
         const allToRemove: Position[] = groups.flat();
         totalCleared += allToRemove.length;
@@ -139,7 +140,7 @@ export default function PuyoPuyo() {
         // 消えるアニメーション
         setClearingPositions(allToRemove);
         setClearedCount(allToRemove.length);
-        
+
         // 連鎖数表示
         setChainCount(chain);
         setShowChainText(true);
@@ -148,17 +149,17 @@ export default function PuyoPuyo() {
         setTimeout(() => {
           setClearingPositions([]);
           setShowChainText(false);
-          
+
           // すべての消えるぷよを削除
           const clearedBoard = newBoard.map(row => [...row]);
           for (const pos of allToRemove) {
             clearedBoard[pos.y][pos.x] = 0;
           }
-          
+
           // 重力適用
           newBoard = applyGravity(clearedBoard);
           setBoard(newBoard);
-          
+
           // 次の連鎖をチェック
           setTimeout(() => processChains(), 300);
         }, 400);
@@ -264,11 +265,11 @@ export default function PuyoPuyo() {
     return () => window.removeEventListener('keydown', handleKeyPress);
   }, [moveHorizontal, moveDown, rotate, hardDrop]);
   const playSound = useCallback((src: string) => {
-  const audio = new Audio(src);
-  audio.volume = 0.6; // 音量調整（0〜1）
-  audio.currentTime = 0;
-  audio.play().catch(() => {}); // 再生エラーを無視
-}, []);
+    const audio = new Audio(src);
+    audio.volume = volume;
+    audio.currentTime = 0;
+    audio.play().catch(() => { });
+  }, [volume]);
 
   const resetGame = () => {
     setBoard(Array(BOARD_HEIGHT).fill(null).map(() => Array(BOARD_WIDTH).fill(0)));
@@ -306,14 +307,14 @@ export default function PuyoPuyo() {
       </div>
 
       {showChainText && (
-        <div 
+        <div
           className="fixed inset-0 flex items-center justify-center pointer-events-none z-50"
           style={{
             animation: 'fadeInOut 0.6s ease-out'
           }}
         >
           <div className="text-center">
-            <div 
+            <div
               className="text-8xl font-black text-yellow-300 mb-2"
               style={{
                 textShadow: '4px 4px 0 #ff00ff, -4px -4px 0 #00ffff, 0 0 20px rgba(255,255,255,0.8)',
@@ -323,7 +324,7 @@ export default function PuyoPuyo() {
               {clearedCount}個消した！
             </div>
             {chainCount > 1 && (
-              <div 
+              <div
                 className="text-6xl font-bold text-white"
                 style={{
                   textShadow: '3px 3px 0 #ff6b6b, -2px -2px 0 #4ecdc4',
@@ -390,7 +391,7 @@ export default function PuyoPuyo() {
                   }}
                 >
                   {cell > 0 && (
-                    <span 
+                    <span
                       style={{
                         fontSize: '11px',
                         fontWeight: 'bold',
@@ -433,6 +434,19 @@ export default function PuyoPuyo() {
         <button onClick={() => moveHorizontal(1)} className="px-4 py-3 bg-blue-800 text-white rounded-lg font-bold">→</button>
         <button onClick={moveDown} className="px-4 py-3 bg-blue-800 text-white rounded-lg font-bold col-start-2">↓</button>
         <button onClick={hardDrop} className="px-4 py-3 bg-yellow-400 text-blue-900 rounded-lg font-bold col-span-3">高速落下</button>
+      </div>
+      <div className="flex items-center justify-center gap-2 mt-3">
+        <span className="text-white text-sm font-bold">音量</span>
+        <input
+          type="range"
+          min="0"
+          max="1"
+          step="0.05"
+          value={volume}
+          onChange={(e) => setVolume(parseFloat(e.target.value))}
+          className="w-40 accent-yellow-400 cursor-pointer"
+        />
+        <span className="text-white text-sm w-8 text-right">{Math.round(volume * 100)}%</span>
       </div>
     </div>
   );
