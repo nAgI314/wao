@@ -448,6 +448,12 @@ export default function PuyoPuyo() {
         />
         <span className="text-white text-sm w-8 text-right">{Math.round(volume * 100)}%</span>
       </div>
+      <button
+        onClick={() => playSound('wao.mp3')}
+        className="mt-4 px-6 py-2 bg-purple-500 hover:bg-purple-600 text-white font-bold rounded-full transition-all transform hover:scale-105 shadow-md"
+      >
+        {"ﾜｵﾜｵ"}
+      </button>
     </div>
   );
 }
