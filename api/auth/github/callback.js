@@ -1,42 +1,28 @@
-// /api/callback.js
-export default async function handler(req, res) {
-  const { code } = req.query;
+// server.js
+import express from 'express';
+import fetch from 'node-fetch';
+import dotenv from 'dotenv';
+dotenv.config();
 
-  if (!code) {
-    return res.status(400).json({ error: "Missing OAuth code" });
-  }
+const app = express();
 
-  // --- 1. GitHubにアクセストークンをリクエスト ---
-  const tokenRes = await fetch("https://github.com/login/oauth/access_token", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
-    body: JSON.stringify({
-      client_id: process.env.GITHUB_CLIENT_ID,
-      client_secret: process.env.GITHUB_CLIENT_SECRET,
-      code,
-    }),
+app.get('/api/callback', async (req, res) => {
+  const code = req.query.code;
+  if (!code) return res.status(400).json({ error: 'codeがありません' });
+
+  const params = new URLSearchParams({
+    client_id: process.env.GITHUB_CLIENT_ID,
+    client_secret: process.env.GITHUB_CLIENT_SECRET,
+    code
   });
 
-  const tokenData = await tokenRes.json();
-  if (tokenData.error) {
-    return res.status(400).json(tokenData);
-  }
-
-  const accessToken = tokenData.access_token;
-
-  // --- 2. トークンでGitHubユーザー情報を取得 ---
-  const userRes = await fetch("https://api.github.com/user", {
-    headers: { Authorization: `token ${accessToken}` },
+  const response = await fetch(`https://github.com/login/oauth/access_token?${params.toString()}`, {
+    method: 'POST',
+    headers: { Accept: 'application/json' },
   });
-  const userData = await userRes.json();
 
-  // --- 3. フロントに返す ---
-  res.status(200).json({
-    access_token: accessToken,
-    login: userData.login, // ← GitHubユーザー名
-    avatar_url: userData.avatar_url,
-  });
-}
+  const data = await response.json();
+  res.json(data); // ここでフロントに JSON を返す
+});
+
+app.listen(3000, () => console.log('Server running on port 3000'));
