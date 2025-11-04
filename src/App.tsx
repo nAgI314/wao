@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 
 const BOARD_WIDTH = 6;
 const BOARD_HEIGHT = 12;
@@ -16,6 +16,13 @@ const COLORS = [
   '#ff00ff', // 紫
 ];
 
+// GitHub設定（環境変数から取得することを推奨）
+const GITHUB_CONFIG = {
+  owner: 'nAgI314', // GitHubユーザー名
+  repo: 'wao', // リポジトリ名
+  token: import.meta.env.VITE_GITHUB_TOKEN // Personal Access Token (repo権限必要)
+};
+
 export default function PuyoPuyo() {
   const [board, setBoard] = useState<Board>(() =>
     Array(BOARD_HEIGHT).fill(null).map(() => Array(BOARD_WIDTH).fill(0))
@@ -31,6 +38,295 @@ export default function PuyoPuyo() {
   const [showChainText, setShowChainText] = useState<boolean>(false);
   const [clearedCount, setClearedCount] = useState<number>(0);
   const [volume, setVolume] = useState<number>(0.6);
+
+  // 録音関連のstate
+  const [isRecording, setIsRecording] = useState<boolean>(false);
+  const [recordedAudioUrl, setRecordedAudioUrl] = useState<string | null>(null);
+  const [uploadStatus, setUploadStatus] = useState<string>('');
+  const [showRecordModal, setShowRecordModal] = useState<boolean>(true);
+  const [prUrl, setPrUrl] = useState<string>('');
+   const [userName, setUserName] = useState<string>(""); // ← 追加：ユーザー名入力欄
+  const [availableAudios, setAvailableAudios] = useState<string[]>([]); // ← 追加：アップロード済み音声一覧
+
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+
+  // 🎵 アップロード済み音声一覧を取得
+  useEffect(() => {
+    const fetchAudios = async () => {
+      try {
+        const res = await fetch(
+          `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/contents/public/audio`
+        );
+        const data = await res.json();
+        const audioFiles = data
+          .filter((f: any) => f.name.endsWith(".webm"))
+          .map((f: any) => f.download_url);
+        setAvailableAudios(audioFiles);
+      } catch (err) {
+        console.error("音声リスト取得エラー:", err);
+      }
+    };
+    fetchAudios();
+  }, []);
+
+  // 録音開始
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        const audioUrl = URL.createObjectURL(audioBlob);
+        setRecordedAudioUrl(audioUrl);
+
+        // ストリームを停止
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+      setUploadStatus('録音中...');
+    } catch (error) {
+      console.error('録音エラー:', error);
+      setUploadStatus('マイクへのアクセスが拒否されました');
+    }
+  };
+
+  // 録音停止
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
+  };
+
+  // BlobをBase64に変換
+  const blobToBase64 = (blob: Blob): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64 = reader.result as string;
+        // data:audio/webm;base64, の部分を除去
+        resolve(base64.split(',')[1]);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  };
+
+  // GitHub APIを使ってPRを作成
+  const createPullRequest = async (audioBlob: Blob) => {
+    if (!userName) {
+      alert("名前を入力してください！");
+      return;
+    }
+    setUploadStatus('アップロード中...');
+
+    try {
+    const base64Audio = await blobToBase64(audioBlob);
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const branchName = `audio-upload-${timestamp}`;
+    let fileName = `wao-${timestamp}-${Math.random().toString(36).slice(2, 6)}.webm`;
+
+    // ① mainブランチの最新SHAを取得
+    const refRes = await fetch(
+      `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/git/refs/heads/main`,
+      {
+        headers: {
+          Authorization: `token ${GITHUB_CONFIG.token}`,
+          Accept: "application/vnd.github.v3+json",
+        },
+      }
+    );
+    const refData = await refRes.json();
+    const baseSha = refData.object.sha;
+
+    // ② 新しいブランチを作成
+    await fetch(
+      `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/git/refs`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `token ${GITHUB_CONFIG.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          ref: `refs/heads/${branchName}`,
+          sha: baseSha,
+        }),
+      }
+    );
+
+    // ③ ファイルが既にあるか確認
+    const checkFile = await fetch(
+      `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/contents/public/audio/${fileName}`
+    );
+    if (checkFile.ok) {
+      // 既存なら別名に変更
+      fileName = fileName.replace(".webm", `-${Math.random().toString(36).slice(2, 6)}.webm`);
+    }
+
+    // ④ 音声ファイルをアップロード
+    const putRes = await fetch(
+      `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/contents/public/audio/${fileName}`,
+      {
+        method: "PUT",
+        headers: {
+          Authorization: `token ${GITHUB_CONFIG.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          message: `Add wao voice: ${fileName}`,
+          content: base64Audio,
+          branch: branchName,
+        }),
+      }
+    );
+
+    const putData = await putRes.json();
+    if (!putRes.ok) throw new Error(putData.message || "Upload failed");
+      console.log('Audio upload response:', putData);
+      const previewUrl = `https://raw.githubusercontent.com/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/${branchName}/public/audio/${fileName}`;
+      setRecordedAudioUrl(previewUrl);
+      setUploadStatus('✅ 音声をアップロードしました（PR作成前に試聴できます）');
+
+
+      // 4. HTMLプレビューファイルを作成
+      const htmlContent = `<!DOCTYPE html>
+<html>
+<head>
+  <title>Audio Preview - ${fileName}</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      max-width: 800px;
+      margin: 50px auto;
+      padding: 20px;
+      background: linear-gradient(to bottom, #4299e1, #667eea);
+      min-height: 100vh;
+    }
+    .container {
+      background: white;
+      padding: 40px;
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+    h1 { color: #2d3748; margin-bottom: 30px; }
+    audio {
+      width: 100%;
+      margin: 20px 0;
+      border-radius: 10px;
+    }
+    .info {
+      background: #edf2f7;
+      padding: 20px;
+      border-radius: 10px;
+      margin-top: 20px;
+    }
+    .wao {
+      font-size: 48px;
+      text-align: center;
+      margin: 30px 0;
+      animation: bounce 1s infinite;
+    }
+    @keyframes bounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-10px); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎤 ﾜｵ! 音声プレビュー</h1>
+    <div class="wao">ﾜｵ!</div>
+    <audio controls autoplay>
+      <source src="${fileName}" type="audio/webm">
+    </audio>
+    <div class="info">
+      <p><strong>ファイル名:</strong> ${fileName}</p>
+      <p><strong>アップロード日時:</strong> ${new Date().toLocaleString('ja-JP')}</p>
+      <p><strong>形式:</strong> WebM Audio</p>
+    </div>
+  </div>
+</body>
+</html>`;
+
+      const base64Html = btoa(unescape(encodeURIComponent(htmlContent)));
+
+      await fetch(
+        `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/contents/public/audio/preview-${timestamp}.html`,
+        {
+          method: 'PUT',
+          headers: {
+            'Authorization': `token ${GITHUB_CONFIG.token}`,
+            'Accept': 'application/vnd.github.v3+json',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            message: `Add audio preview: ${fileName}`,
+            content: base64Html,
+            branch: branchName
+          })
+        }
+      );
+
+      // 5. Pull Requestを作成
+      const prRes = await fetch(
+        `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/pulls`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `token ${GITHUB_CONFIG.token}`,
+            'Accept': 'application/vnd.github.v3+json',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            title: `🎤 新しいﾜｵ!音声 from ${userName}`,
+            head: branchName,
+            base: 'main',
+            body: `## 🎉 ${userName}さんの新しいﾜｵ!音声がアップロードされました！
+
+### 🔊 プレビュー
+[こちらをクリックして試聴](https://raw.githubusercontent.com/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/${branchName}/public/audio/${fileName})
+
+### 📁 ファイル情報
+- **ファイル名**: \`${fileName}\`
+- **アップロード日時**: ${new Date().toLocaleString('ja-JP')}
+- **形式**: WebM Audio
+
+---  
+*このPRは自動生成されました*`
+          })
+        }
+      );
+
+      const prData = await prRes.json();
+
+      if (prData.html_url) {
+        setPrUrl(prData.html_url);
+        setUploadStatus('✅ アップロード完了！PRが作成されました');
+        setTimeout(() => {
+          setShowRecordModal(false);
+        }, 3000);
+      } else {
+        throw new Error('PR作成に失敗しました');
+      }
+
+    } catch (error) {
+      console.error('アップロードエラー:', error);
+      setUploadStatus('❌ アップロードに失敗しました。GitHub設定を確認してください。');
+    }
+  };
 
   const createNewPair = useCallback((): Puyo[] => {
     const color1 = Math.floor(Math.random() * COLORS.length) + 1;
@@ -107,6 +403,16 @@ export default function PuyoPuyo() {
     return newBoard;
   }, []);
 
+  const playSound = useCallback(() => {
+    if (availableAudios.length > 0) {
+      const randomUrl =
+        availableAudios[Math.floor(Math.random() * availableAudios.length)];
+      const audio = new Audio(randomUrl);
+      audio.volume = volume;
+      audio.play().catch(() => {});
+    }
+  }, [availableAudios, volume]);
+
   const placePair = useCallback(() => {
     if (currentPair.length === 0) return;
 
@@ -131,40 +437,32 @@ export default function PuyoPuyo() {
       if (groups.length > 0) {
         chain++;
 
-        // すべての消えるぷよを一度に収集
         const allToRemove: Position[] = groups.flat();
         totalCleared += allToRemove.length;
 
-        playSound('wao.mp3');
+        playSound();
 
-        // 消えるアニメーション
         setClearingPositions(allToRemove);
         setClearedCount(allToRemove.length);
 
-        // 連鎖数表示
         setChainCount(chain);
         setShowChainText(true);
 
-        // アニメーション後に実際に消す
         setTimeout(() => {
           setClearingPositions([]);
           setShowChainText(false);
 
-          // すべての消えるぷよを削除
           const clearedBoard = newBoard.map(row => [...row]);
           for (const pos of allToRemove) {
             clearedBoard[pos.y][pos.x] = 0;
           }
 
-          // 重力適用
           newBoard = applyGravity(clearedBoard);
           setBoard(newBoard);
 
-          // 次の連鎖をチェック
           setTimeout(() => processChains(), 300);
         }, 400);
       } else {
-        // 連鎖終了
         if (totalCleared > 0) {
           const bonus = chain > 1 ? Math.pow(2, chain - 1) : 1;
           setScore(s => s + totalCleared * 10 * bonus);
@@ -181,9 +479,8 @@ export default function PuyoPuyo() {
       }
     };
 
-    // 少し待ってから連鎖処理開始
     setTimeout(() => processChains(), 200);
-  }, [board, currentPair, applyGravity, findConnectedGroups, createNewPair, checkCollision]);
+  }, [board, currentPair, applyGravity, findConnectedGroups, createNewPair, checkCollision, playSound]);
 
   const moveDown = useCallback(() => {
     if (currentPair.length === 0 || gameOver || isPaused || isDropping) return;
@@ -264,12 +561,6 @@ export default function PuyoPuyo() {
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
   }, [moveHorizontal, moveDown, rotate, hardDrop]);
-  const playSound = useCallback((src: string) => {
-    const audio = new Audio(src);
-    audio.volume = volume;
-    audio.currentTime = 0;
-    audio.play().catch(() => { });
-  }, [volume]);
 
   const resetGame = () => {
     setBoard(Array(BOARD_HEIGHT).fill(null).map(() => Array(BOARD_WIDTH).fill(0)));
@@ -296,8 +587,107 @@ export default function PuyoPuyo() {
     return displayBoard;
   };
 
+  const handleUpload = async () => {
+    if (!recordedAudioUrl) return;
+
+    const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+    await createPullRequest(audioBlob);
+  };
+
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-b from-blue-400 to-blue-600 p-4 w-screen h-screen">
+      {/* 録音モーダル */}
+      {showRecordModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl">
+            <h2 className="text-3xl font-bold text-center mb-4 text-blue-900">ﾜｵ!を録音しよう</h2>
+            <input
+              type="text"
+              placeholder="あなたの名前"
+              value={userName}
+              onChange={(e) => setUserName(e.target.value)}
+              className="border rounded-lg px-4 py-2 w-full mb-4 text-lg text-center"
+            />
+
+            <div className="flex flex-col gap-4 items-center">
+              {!isRecording && !recordedAudioUrl && (
+                <button
+                  onClick={startRecording}
+                  className="px-8 py-4 bg-red-500 hover:bg-red-600 text-white font-bold rounded-full text-xl transition-all transform hover:scale-105 shadow-lg flex items-center gap-2"
+                >
+                  <span>🎤</span> 録音開始
+                </button>
+              )}
+
+              {isRecording && (
+                <button
+                  onClick={stopRecording}
+                  className="px-8 py-4 bg-gray-700 hover:bg-gray-800 text-white font-bold rounded-full text-xl transition-all transform hover:scale-105 shadow-lg animate-pulse"
+                >
+                  ⏹️ 録音停止
+                </button>
+              )}
+
+              {recordedAudioUrl && (
+                <div className="flex flex-col gap-3 items-center w-full">
+                  <audio src={recordedAudioUrl} controls className="w-full" />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        setRecordedAudioUrl(null);
+                        setUploadStatus('');
+                        setPrUrl('');
+                      }}
+                      className="px-6 py-2 bg-blue-500 hover:bg-blue-600 text-white font-bold rounded-lg transition-all"
+                    >
+                      録音し直す
+                    </button>
+                    <button
+                      onClick={handleUpload}
+                      className="px-6 py-2 bg-green-500 hover:bg-green-600 text-white font-bold rounded-lg transition-all"
+                    >
+                      GitHubにアップロード
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {uploadStatus && (
+                <div className="text-center">
+                  <p className="text-lg font-bold text-blue-900 mb-2">
+                    {uploadStatus}
+                  </p>
+                  {prUrl && (
+                    <a
+                      href={prUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:text-blue-800 underline text-sm"
+                    >
+                      PRを確認する →
+                    </a>
+                  )}
+                </div>
+              )}
+
+              {recordedAudioUrl && (
+                <button
+                  onClick={() => setShowRecordModal(false)}
+                  className="px-8 py-3 bg-purple-500 hover:bg-purple-600 text-white font-bold rounded-lg text-lg transition-all transform hover:scale-105"
+                >
+                  録音した音声で開始
+                </button>
+              )}
+            </div>
+
+            <p className="text-xs text-gray-500 text-center mt-6">
+              ※ マイクへのアクセス許可が必要です<br />
+              ※ GitHub設定が必要です（コード内のGITHUB_CONFIGを編集）
+            </p>
+          </div>
+        </div>
+      )}
+
       <h1 className="text-5xl font-bold text-white mb-4 drop-shadow-lg">ﾜｵぷよ</h1>
 
       <div className="mb-4 text-center relative">
@@ -448,12 +838,6 @@ export default function PuyoPuyo() {
         />
         <span className="text-white text-sm w-8 text-right">{Math.round(volume * 100)}%</span>
       </div>
-      <button
-        onClick={() => playSound('wao.mp3')}
-        className="mt-4 px-6 py-2 bg-purple-500 hover:bg-purple-600 text-white font-bold rounded-full transition-all transform hover:scale-105 shadow-md"
-      >
-        {"ﾜｵﾜｵ"}
-      </button>
     </div>
   );
 }
