@@ -9,8 +9,7 @@ export default function Callback() {
     const code = urlParams.get("code");
 
     if (code) {
-      // あなたのAPI（/api/github-auth）を叩いてアクセストークンを取得
-      fetch(`/api/github-auth?code=${code}`)
+      fetch(`/api/callback=${code}`)
         .then((res) => res.json())
         .then((data) => {
           console.log("GitHub token:", data.access_token);
