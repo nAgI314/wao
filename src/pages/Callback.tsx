@@ -9,8 +9,10 @@ export default function Callback() {
     const code = urlParams.get("code");
 
     if (code) {
-      fetch(`/api/callback=${code}`)
-        .then((res) => res.json())
+      fetch(`/api/git-auth=${code}`)
+        .then((res) => 
+          res.json()
+      )
         .then((data) => {
           console.log("GitHub token:", data.access_token);
           // ローカルストレージに保存（例）
