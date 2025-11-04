@@ -9,7 +9,7 @@ export default function Callback() {
     const code = urlParams.get("code");
 
     if (code) {
-      fetch(`/api/git-auth=${code}`)
+      fetch(`/api/git-auth=$code=${code}`)
         .then((res) => 
           res.json()
       )
