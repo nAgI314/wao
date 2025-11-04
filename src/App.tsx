@@ -20,7 +20,7 @@ const COLORS = [
 const GITHUB_CONFIG = {
   owner: 'nAgI314', // GitHubユーザー名
   repo: 'wao', // リポジトリ名
-  token: import.meta.env.VITE_GITHUB_TOKEN // Personal Access Token (repo権限必要)
+  // token: import.meta.env.VITE_GITHUB_TOKEN 
 };
 
 export default function PuyoPuyo() {
@@ -125,208 +125,244 @@ export default function PuyoPuyo() {
   };
 
   // GitHub APIを使ってPRを作成
-  const createPullRequest = async (audioBlob: Blob) => {
-    if (!userName) {
-      alert("名前を入力してください！");
-      return;
-    }
-    setUploadStatus('アップロード中...');
+//   const createPullRequest = async (audioBlob: Blob) => {
+//     if (!userName) {
+//       alert("名前を入力してください！");
+//       return;
+//     }
+//     setUploadStatus('アップロード中...');
 
-    try {
+//     try {
+//     const base64Audio = await blobToBase64(audioBlob);
+//     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+//     const branchName = `audio-upload-${timestamp}`;
+//     let fileName = `wao-${timestamp}-${Math.random().toString(36).slice(2, 6)}.webm`;
+
+//     // ① mainブランチの最新SHAを取得
+//     const refRes = await fetch(
+//       `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/dispatches`,
+//       {
+//         headers: {
+//           Authorization: `token ${GITHUB_CONFIG.token}`,
+//           Accept: "application/vnd.github.v3+json",
+//         },
+//       }
+//     );
+//     const refData = await refRes.json();
+//     const baseSha = refData.object.sha;
+
+//     // ② 新しいブランチを作成
+//     await fetch(
+//       `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/git/refs`,
+//       {
+//         method: "POST",
+//         headers: {
+//           Authorization: `token ${GITHUB_CONFIG.token}`,
+//           "Content-Type": "application/json",
+//         },
+//         body: JSON.stringify({
+//           ref: `refs/heads/${branchName}`,
+//           sha: baseSha,
+//         }),
+//       }
+//     );
+
+//     // ③ ファイルが既にあるか確認
+//     const checkFile = await fetch(
+//       `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/contents/public/audio/${fileName}`
+//     );
+//     if (checkFile.ok) {
+//       // 既存なら別名に変更
+//       fileName = fileName.replace(".webm", `-${Math.random().toString(36).slice(2, 6)}.webm`);
+//     }
+
+//     // ④ 音声ファイルをアップロード
+//     const putRes = await fetch(
+//       `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/contents/public/audio/${fileName}`,
+//       {
+//         method: "PUT",
+//         headers: {
+//           Authorization: `token ${GITHUB_CONFIG.token}`,
+//           "Content-Type": "application/json",
+//         },
+//         body: JSON.stringify({
+//           message: `Add wao voice: ${fileName}`,
+//           content: base64Audio,
+//           branch: branchName,
+//         }),
+//       }
+//     );
+
+//     const putData = await putRes.json();
+//     if (!putRes.ok) throw new Error(putData.message || "Upload failed");
+//       console.log('Audio upload response:', putData);
+//       const previewUrl = `https://raw.githubusercontent.com/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/${branchName}/public/audio/${fileName}`;
+//       setRecordedAudioUrl(previewUrl);
+//       setUploadStatus('✅ 音声をアップロードしました（PR作成前に試聴できます）');
+
+
+//       // 4. HTMLプレビューファイルを作成
+//       const htmlContent = `<!DOCTYPE html>
+// <html>
+// <head>
+//   <title>Audio Preview - ${fileName}</title>
+//   <style>
+//     body {
+//       font-family: system-ui, -apple-system, sans-serif;
+//       max-width: 800px;
+//       margin: 50px auto;
+//       padding: 20px;
+//       background: linear-gradient(to bottom, #4299e1, #667eea);
+//       min-height: 100vh;
+//     }
+//     .container {
+//       background: white;
+//       padding: 40px;
+//       border-radius: 20px;
+//       box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+//     }
+//     h1 { color: #2d3748; margin-bottom: 30px; }
+//     audio {
+//       width: 100%;
+//       margin: 20px 0;
+//       border-radius: 10px;
+//     }
+//     .info {
+//       background: #edf2f7;
+//       padding: 20px;
+//       border-radius: 10px;
+//       margin-top: 20px;
+//     }
+//     .wao {
+//       font-size: 48px;
+//       text-align: center;
+//       margin: 30px 0;
+//       animation: bounce 1s infinite;
+//     }
+//     @keyframes bounce {
+//       0%, 100% { transform: translateY(0); }
+//       50% { transform: translateY(-10px); }
+//     }
+//   </style>
+// </head>
+// <body>
+//   <div class="container">
+//     <h1>🎤 ﾜｵ! 音声プレビュー</h1>
+//     <div class="wao">ﾜｵ!</div>
+//     <audio controls autoplay>
+//       <source src="${fileName}" type="audio/webm">
+//     </audio>
+//     <div class="info">
+//       <p><strong>ファイル名:</strong> ${fileName}</p>
+//       <p><strong>アップロード日時:</strong> ${new Date().toLocaleString('ja-JP')}</p>
+//       <p><strong>形式:</strong> WebM Audio</p>
+//     </div>
+//   </div>
+// </body>
+// </html>`;
+
+//       const base64Html = btoa(unescape(encodeURIComponent(htmlContent)));
+
+//       await fetch(
+//         `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/contents/public/audio/preview-${timestamp}.html`,
+//         {
+//           method: 'PUT',
+//           headers: {
+//             'Authorization': `token ${GITHUB_CONFIG.token}`,
+//             'Accept': 'application/vnd.github.v3+json',
+//             'Content-Type': 'application/json'
+//           },
+//           body: JSON.stringify({
+//             message: `Add audio preview: ${fileName}`,
+//             content: base64Html,
+//             branch: branchName
+//           })
+//         }
+//       );
+
+//       // 5. Pull Requestを作成
+//       const prRes = await fetch(
+//         `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/pulls`,
+//         {
+//           method: 'POST',
+//           headers: {
+//             'Authorization': `token ${GITHUB_CONFIG.token}`,
+//             'Accept': 'application/vnd.github.v3+json',
+//             'Content-Type': 'application/json'
+//           },
+//           body: JSON.stringify({
+//             title: `🎤 新しいﾜｵ!音声 from ${userName}`,
+//             head: branchName,
+//             base: 'main',
+//             body: `## 🎉 ${userName}さんの新しいﾜｵ!音声がアップロードされました！
+
+// ### 🔊 プレビュー
+// [こちらをクリックして試聴](https://raw.githubusercontent.com/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/${branchName}/public/audio/${fileName})
+
+// ### 📁 ファイル情報
+// - **ファイル名**: \`${fileName}\`
+// - **アップロード日時**: ${new Date().toLocaleString('ja-JP')}
+// - **形式**: WebM Audio
+
+// ---  
+// *このPRは自動生成されました*`
+//           })
+//         }
+//       );
+
+//       const prData = await prRes.json();
+
+//       if (prData.html_url) {
+//         setPrUrl(prData.html_url);
+//         setUploadStatus('✅ アップロード完了！PRが作成されました');
+//         setTimeout(() => {
+//           setShowRecordModal(false);
+//         }, 3000);
+//       } else {
+//         throw new Error('PR作成に失敗しました');
+//       }
+
+//     } catch (error) {
+//       console.error('アップロードエラー:', error);
+//       setUploadStatus('❌ アップロードに失敗しました。GitHub設定を確認してください。');
+//     }
+//   };
+
+  const triggerGitHubAction = async (audioBlob: Blob) => {
+  if (!userName) {
+    alert("名前を入力してください！");
+    return;
+  }
+
+  setUploadStatus("GitHub Actionsを起動中...");
+
+  try {
     const base64Audio = await blobToBase64(audioBlob);
-    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const branchName = `audio-upload-${timestamp}`;
-    let fileName = `wao-${timestamp}-${Math.random().toString(36).slice(2, 6)}.webm`;
 
-    // ① mainブランチの最新SHAを取得
-    const refRes = await fetch(
-      `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/git/refs/heads/main`,
-      {
-        headers: {
-          Authorization: `token ${GITHUB_CONFIG.token}`,
-          Accept: "application/vnd.github.v3+json",
-        },
-      }
-    );
-    const refData = await refRes.json();
-    const baseSha = refData.object.sha;
-
-    // ② 新しいブランチを作成
-    await fetch(
-      `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/git/refs`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `token ${GITHUB_CONFIG.token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          ref: `refs/heads/${branchName}`,
-          sha: baseSha,
-        }),
-      }
-    );
-
-    // ③ ファイルが既にあるか確認
-    const checkFile = await fetch(
-      `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/contents/public/audio/${fileName}`
-    );
-    if (checkFile.ok) {
-      // 既存なら別名に変更
-      fileName = fileName.replace(".webm", `-${Math.random().toString(36).slice(2, 6)}.webm`);
-    }
-
-    // ④ 音声ファイルをアップロード
-    const putRes = await fetch(
-      `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/contents/public/audio/${fileName}`,
-      {
-        method: "PUT",
-        headers: {
-          Authorization: `token ${GITHUB_CONFIG.token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          message: `Add wao voice: ${fileName}`,
+    // GitHub Actions に repository_dispatch イベントを送る
+    await fetch(`https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/dispatches`, {
+      method: "POST",
+      headers: {
+        "Accept": "application/vnd.github+json",
+        "Authorization": `Bearer ghp_dummy`, // ← GitHub Pagesはトークン不要にできます（後述）
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+      body: JSON.stringify({
+        event_type: "add_audio",
+        client_payload: {
+          fileName: `wao-${new Date().toISOString().replace(/[:.]/g, "-")}.webm`,
           content: base64Audio,
-          branch: branchName,
-        }),
-      }
-    );
-
-    const putData = await putRes.json();
-    if (!putRes.ok) throw new Error(putData.message || "Upload failed");
-      console.log('Audio upload response:', putData);
-      const previewUrl = `https://raw.githubusercontent.com/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/${branchName}/public/audio/${fileName}`;
-      setRecordedAudioUrl(previewUrl);
-      setUploadStatus('✅ 音声をアップロードしました（PR作成前に試聴できます）');
-
-
-      // 4. HTMLプレビューファイルを作成
-      const htmlContent = `<!DOCTYPE html>
-<html>
-<head>
-  <title>Audio Preview - ${fileName}</title>
-  <style>
-    body {
-      font-family: system-ui, -apple-system, sans-serif;
-      max-width: 800px;
-      margin: 50px auto;
-      padding: 20px;
-      background: linear-gradient(to bottom, #4299e1, #667eea);
-      min-height: 100vh;
-    }
-    .container {
-      background: white;
-      padding: 40px;
-      border-radius: 20px;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-    }
-    h1 { color: #2d3748; margin-bottom: 30px; }
-    audio {
-      width: 100%;
-      margin: 20px 0;
-      border-radius: 10px;
-    }
-    .info {
-      background: #edf2f7;
-      padding: 20px;
-      border-radius: 10px;
-      margin-top: 20px;
-    }
-    .wao {
-      font-size: 48px;
-      text-align: center;
-      margin: 30px 0;
-      animation: bounce 1s infinite;
-    }
-    @keyframes bounce {
-      0%, 100% { transform: translateY(0); }
-      50% { transform: translateY(-10px); }
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h1>🎤 ﾜｵ! 音声プレビュー</h1>
-    <div class="wao">ﾜｵ!</div>
-    <audio controls autoplay>
-      <source src="${fileName}" type="audio/webm">
-    </audio>
-    <div class="info">
-      <p><strong>ファイル名:</strong> ${fileName}</p>
-      <p><strong>アップロード日時:</strong> ${new Date().toLocaleString('ja-JP')}</p>
-      <p><strong>形式:</strong> WebM Audio</p>
-    </div>
-  </div>
-</body>
-</html>`;
-
-      const base64Html = btoa(unescape(encodeURIComponent(htmlContent)));
-
-      await fetch(
-        `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/contents/public/audio/preview-${timestamp}.html`,
-        {
-          method: 'PUT',
-          headers: {
-            'Authorization': `token ${GITHUB_CONFIG.token}`,
-            'Accept': 'application/vnd.github.v3+json',
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            message: `Add audio preview: ${fileName}`,
-            content: base64Html,
-            branch: branchName
-          })
+          user: userName
         }
-      );
+      })
+    });
 
-      // 5. Pull Requestを作成
-      const prRes = await fetch(
-        `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/pulls`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `token ${GITHUB_CONFIG.token}`,
-            'Accept': 'application/vnd.github.v3+json',
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            title: `🎤 新しいﾜｵ!音声 from ${userName}`,
-            head: branchName,
-            base: 'main',
-            body: `## 🎉 ${userName}さんの新しいﾜｵ!音声がアップロードされました！
-
-### 🔊 プレビュー
-[こちらをクリックして試聴](https://raw.githubusercontent.com/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/${branchName}/public/audio/${fileName})
-
-### 📁 ファイル情報
-- **ファイル名**: \`${fileName}\`
-- **アップロード日時**: ${new Date().toLocaleString('ja-JP')}
-- **形式**: WebM Audio
-
----  
-*このPRは自動生成されました*`
-          })
-        }
-      );
-
-      const prData = await prRes.json();
-
-      if (prData.html_url) {
-        setPrUrl(prData.html_url);
-        setUploadStatus('✅ アップロード完了！PRが作成されました');
-        setTimeout(() => {
-          setShowRecordModal(false);
-        }, 3000);
-      } else {
-        throw new Error('PR作成に失敗しました');
-      }
-
-    } catch (error) {
-      console.error('アップロードエラー:', error);
-      setUploadStatus('❌ アップロードに失敗しました。GitHub設定を確認してください。');
-    }
-  };
+    setUploadStatus("✅ GitHub Actionsに送信しました。反映まで数秒かかります。");
+  } catch (err) {
+    console.error(err);
+    setUploadStatus("❌ 送信に失敗しました。");
+  }
+};
 
   const createNewPair = useCallback((): Puyo[] => {
     const color1 = Math.floor(Math.random() * COLORS.length) + 1;
@@ -591,7 +627,8 @@ export default function PuyoPuyo() {
     if (!recordedAudioUrl) return;
 
     const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-    await createPullRequest(audioBlob);
+    // await createPullRequest(audioBlob);
+    await triggerGitHubAction(audioBlob);
   };
 
   return (
