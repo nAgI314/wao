@@ -144,7 +144,7 @@ export default function PuyoPuyo() {
 
     const code = new URLSearchParams(window.location.search).get("code");
     if (code) {
-      const res = await fetch(`/api/callback?code=${code}`);
+      const res = await fetch(`/api/git-auth?code=${code}`);
       const data = await res.json();
       if (data.access_token) {
         localStorage.setItem("github_token", data.access_token);
