@@ -6,7 +6,7 @@ dotenv.config();
 
 const app = express();
 
-app.get('/api/callback', async (req, res) => {
+app.get('/api/git-auth', async (req, res) => {
   const code = req.query.code;
   if (!code) return res.status(400).json({ error: 'codeがありません' });
 
@@ -16,10 +16,17 @@ app.get('/api/callback', async (req, res) => {
     code
   });
 
-  const response = await fetch(`https://github.com/login/oauth/access_token?${params.toString()}`, {
+  // const response = await fetch(`https://github.com/login/oauth/access_token?${params.toString()}`, {
+  //   method: 'POST',
+  //   headers: { Accept: 'application/json' },
+  // });
+
+  const response = await fetch('https://github.com/login/oauth/access_token', {
     method: 'POST',
     headers: { Accept: 'application/json' },
+    body: params
   });
+
 
   const data = await response.json();
   res.json(data); // ここでフロントに JSON を返す
