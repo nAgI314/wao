@@ -132,9 +132,17 @@ export default function PuyoPuyo() {
   // --- GitHubログインヘルパー ---
   const loginWithGitHub = () => {
   const clientId = import.meta.env.VITE_GITHUB_CLIENT_ID;
+  if (!clientId) {
+    alert("❌ VITE_GITHUB_CLIENT_ID が設定されていません");
+    return;
+  }
+  
+  // リダイレクトURIは /callback に統一
   const redirectUri = `${window.location.origin}/callback`;
   const scope = "repo,user";
   const url = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scope}`;
+  
+  console.log("🔗 GitHub認証URL:", url);
   window.location.href = url;
 };
 
@@ -147,7 +155,7 @@ export default function PuyoPuyo() {
     return token;
   }
 
-  // 2. URLからcodeを取得
+  // 2. URLからcodeを取得（主にローカルテスト用）
   const code = new URLSearchParams(window.location.search).get("code");
   if (code) {
     try {
@@ -156,7 +164,6 @@ export default function PuyoPuyo() {
       
       if (data.access_token) {
         localStorage.setItem("github_token", data.access_token);
-        // URLから?codeを削除
         window.history.replaceState({}, document.title, "/");
         console.log("✅ コードからトークン取得");
         return data.access_token;
@@ -169,10 +176,8 @@ export default function PuyoPuyo() {
     }
   }
 
-  // 3. トークンなしの場合はnull
   return null;
 };
-
   // GitHub APIを使ってPRを作成
   const createPullRequest = async (audioBlob: Blob) => {
   let token = await getGitHubToken();
