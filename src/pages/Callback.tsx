@@ -23,12 +23,13 @@ export default function Callback() {
     fetch(`/api/git-auth?code=${encodeURIComponent(code)}`)
       .then((res) => {
         console.log("📡 API Response Status:", res.status);
-        
+        console.log(res);
         // ステータスコードを確認
         if (!res.ok) {
           return res.text().then(text => {
             throw new Error(`HTTP ${res.status}: ${text}`);
           });
+          
         }
         
         // JSON として解析
