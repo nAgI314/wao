@@ -131,113 +131,135 @@ export default function PuyoPuyo() {
 
   // --- GitHubログインヘルパー ---
   const loginWithGitHub = () => {
-    const clientId = import.meta.env.VITE_GITHUB_CLIENT_ID;
-    const redirectUri = `${window.location.origin}/callback`;
-    const scope = "repo"; // PR作成用
-    window.location.href = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scope}`;
-  };
+  const clientId = import.meta.env.VITE_GITHUB_CLIENT_ID;
+  const redirectUri = `${window.location.origin}/callback`;
+  const scope = "repo,user";
+  const url = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scope}`;
+  window.location.href = url;
+};
 
   // --- アクセストークンを取得する関数 ---
-  const getGitHubToken = async () => {
-    let token = localStorage.getItem("github_token");
-    if (token) return token;
+ const getGitHubToken = async () => {
+  // 1. ローカルストレージから取得
+  let token = localStorage.getItem("github_token");
+  if (token) {
+    console.log("✅ キャッシュからトークン取得");
+    return token;
+  }
 
-    const code = new URLSearchParams(window.location.search).get("code");
-    if (code) {
-      const res = await fetch(`/api/git-auth?code=${code}`);
+  // 2. URLからcodeを取得
+  const code = new URLSearchParams(window.location.search).get("code");
+  if (code) {
+    try {
+      const res = await fetch(`/api/git-auth?code=${encodeURIComponent(code)}`);
       const data = await res.json();
+      
       if (data.access_token) {
         localStorage.setItem("github_token", data.access_token);
+        // URLから?codeを削除
         window.history.replaceState({}, document.title, "/");
+        console.log("✅ コードからトークン取得");
         return data.access_token;
+      } else {
+        throw new Error(data.error || "トークン取得失敗");
       }
+    } catch (err) {
+      console.error("❌ トークン取得エラー:", err);
+      return null;
     }
-    return null;
-  };
+  }
 
+  // 3. トークンなしの場合はnull
+  return null;
+};
 
   // GitHub APIを使ってPRを作成
   const createPullRequest = async (audioBlob: Blob) => {
-    // 👇 トークン取得またはログイン誘導
-    let token = await getGitHubToken();
-    if (!token) {
-      alert("GitHubにログインしてください！");
+  let token = await getGitHubToken();
+  
+  if (!token) {
+    const confirmed = window.confirm("GitHubにログインしてください。ログイン画面に移動しますか？");
+    if (confirmed) {
       loginWithGitHub();
-      return;
     }
-    setUploadStatus('アップロード中...');
+    return;
+  }
 
-    try {
-      const base64Audio = await blobToBase64(audioBlob);
-      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-      const branchName = `audio-upload-${timestamp}`;
-      let fileName = `wao-${timestamp}-${Math.random().toString(36).slice(2, 6)}.webm`;
+  setUploadStatus('アップロード中...');
 
-      // ① mainブランチの最新SHAを取得
-      const refRes = await fetch(
-        `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/dispatches`,
-        {
-          headers: {
-            Authorization: `token ${token}`,
-            Accept: "application/vnd.github.v3+json",
-          },
-        }
-      );
-      const refData = await refRes.json();
-      const baseSha = refData.object.sha;
+  try {
+    const base64Audio = await blobToBase64(audioBlob);
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const branchName = `audio-upload-${timestamp}`;
+    let fileName = `wao-${timestamp}-${Math.random().toString(36).slice(2, 6)}.webm`;
 
-      // ② 新しいブランチを作成
-      await fetch(
-        `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/git/refs`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `token ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            ref: `refs/heads/${branchName}`,
-            sha: baseSha,
-          }),
-        }
-      );
-
-      // ③ ファイルが既にあるか確認
-      const checkFile = await fetch(
-        `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/contents/public/audio/${fileName}`
-      );
-      if (checkFile.ok) {
-        // 既存なら別名に変更
-        fileName = fileName.replace(".webm", `-${Math.random().toString(36).slice(2, 6)}.webm`);
+    // ① mainブランチの最新SHAを取得
+    const refRes = await fetch(
+      `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/git/refs/heads/main`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/vnd.github.v3+json",
+        },
       }
+    );
+    
+    if (!refRes.ok) {
+      throw new Error(`ブランチ取得失敗: ${refRes.status}`);
+    }
+    
+    const refData = await refRes.json();
+    const baseSha = refData.object.sha;
 
-      // ④ 音声ファイルをアップロード
-      const putRes = await fetch(
-        `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/contents/public/audio/${fileName}`,
-        {
-          method: "PUT",
-          headers: {
-            Authorization: `token ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            message: `Add wao voice: ${fileName}`,
-            content: base64Audio,
-            branch: branchName,
-          }),
-        }
-      );
+    // ② 新しいブランチを作成
+    const createBranchRes = await fetch(
+      `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/git/refs`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          Accept: "application/vnd.github.v3+json",
+        },
+        body: JSON.stringify({
+          ref: `refs/heads/${branchName}`,
+          sha: baseSha,
+        }),
+      }
+    );
 
-      const putData = await putRes.json();
-      if (!putRes.ok) throw new Error(putData.message || "Upload failed");
-      console.log('Audio upload response:', putData);
-      const previewUrl = `https://raw.githubusercontent.com/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/${branchName}/public/audio/${fileName}`;
-      setRecordedAudioUrl(previewUrl);
-      setUploadStatus('✅ 音声をアップロードしました（PR作成前に試聴できます）');
+    if (!createBranchRes.ok) {
+      throw new Error(`ブランチ作成失敗: ${createBranchRes.status}`);
+    }
 
+    // ③ 音声ファイルをアップロード
+    const putRes = await fetch(
+      `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/contents/public/audio/${fileName}`,
+      {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          Accept: "application/vnd.github.v3+json",
+        },
+        body: JSON.stringify({
+          message: `Add wao voice: ${fileName}`,
+          content: base64Audio,
+          branch: branchName,
+        }),
+      }
+    );
 
-      // 4. HTMLプレビューファイルを作成
-      const htmlContent = `<!DOCTYPE html>
+    const putData = await putRes.json();
+    if (!putRes.ok) {
+      throw new Error(putData.message || "Upload failed");
+    }
+
+    setRecordedAudioUrl(`https://raw.githubusercontent.com/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/${branchName}/public/audio/${fileName}`);
+    setUploadStatus('✅ 音声をアップロードしました');
+
+    // ④ HTMLプレビューファイルを作成
+    const htmlContent = `<!DOCTYPE html>
 <html>
 <head>
   <title>Audio Preview - ${fileName}</title>
@@ -296,40 +318,40 @@ export default function PuyoPuyo() {
 </body>
 </html>`;
 
-      const base64Html = btoa(unescape(encodeURIComponent(htmlContent)));
+    const base64Html = btoa(unescape(encodeURIComponent(htmlContent)));
 
-      await fetch(
-        `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/contents/public/audio/preview-${timestamp}.html`,
-        {
-          method: 'PUT',
-          headers: {
-            'Authorization': `token ${token}`,
-            'Accept': 'application/vnd.github.v3+json',
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            message: `Add audio preview: ${fileName}`,
-            content: base64Html,
-            branch: branchName
-          })
-        }
-      );
+    await fetch(
+      `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/contents/public/audio/preview-${timestamp}.html`,
+      {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/vnd.github.v3+json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          message: `Add audio preview: ${fileName}`,
+          content: base64Html,
+          branch: branchName
+        })
+      }
+    );
 
-      // 5. Pull Requestを作成
-      const prRes = await fetch(
-        `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/pulls`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `token ${token}`,
-            'Accept': 'application/vnd.github.v3+json',
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            title: `🎤 新しいﾜｵ!音声 from ${userName}`,
-            head: branchName,
-            base: 'main',
-            body: `## 🎉 ${userName}さんの新しいﾜｵ!音声がアップロードされました！
+    // ⑤ Pull Requestを作成
+    const prRes = await fetch(
+      `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/pulls`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/vnd.github.v3+json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          title: `🎤 新しいﾜｵ!音声 from ${userName}`,
+          head: branchName,
+          base: 'main',
+          body: `## 🎉 ${userName}さんの新しいﾜｵ!音声がアップロードされました！
 
 ### 🔊 プレビュー
 [こちらをクリックして試聴](https://raw.githubusercontent.com/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/${branchName}/public/audio/${fileName})
@@ -341,27 +363,27 @@ export default function PuyoPuyo() {
 
 ---  
 *このPRは自動生成されました*`
-          })
-        }
-      );
-
-      const prData = await prRes.json();
-
-      if (prData.html_url) {
-        setPrUrl(prData.html_url);
-        setUploadStatus('✅ アップロード完了！PRが作成されました');
-        setTimeout(() => {
-          setShowRecordModal(false);
-        }, 3000);
-      } else {
-        throw new Error('PR作成に失敗しました');
+        })
       }
+    );
 
-    } catch (error) {
-      console.error('アップロードエラー:', error);
-      setUploadStatus('❌ アップロードに失敗しました。GitHub設定を確認してください。');
+    const prData = await prRes.json();
+
+    if (prData.html_url) {
+      setPrUrl(prData.html_url);
+      setUploadStatus('✅ アップロード完了！PRが作成されました');
+      setTimeout(() => {
+        setShowRecordModal(false);
+      }, 3000);
+    } else {
+      throw new Error(prData.message || 'PR作成に失敗しました');
     }
-  };
+
+  } catch (error) {
+    console.error('❌ アップロードエラー:', error);
+    setUploadStatus(`❌ エラー: ${error}`);
+  }
+};
 
   const createNewPair = useCallback((): Puyo[] => {
     const color1 = Math.floor(Math.random() * COLORS.length) + 1;
